@@ -353,34 +353,38 @@ class ClientIO extends ClientBase with ClientMixin {
   bool get _customSchemeAllowed => Platform.isWindows || Platform.isLinux;
 
   @override
-  Future webAuth(Uri url, {String? callbackUrlScheme}) {
-    return FlutterWebAuth2.authenticate(
+  Future webAuth(Uri url, {String? callbackUrlScheme}) async {
+    final result = await FlutterWebAuth2.authenticate(
       url: url.toString(),
       callbackUrlScheme: callbackUrlScheme != null && _customSchemeAllowed
           ? callbackUrlScheme
           : "appwrite-callback-${config['project']!}",
       options: const FlutterWebAuth2Options(
-        intentFlags: ephemeralIntentFlags,
+        preferEphemeral: false,
         useWebview: false,
       ),
-    ).then((value) async {
-      Uri url = Uri.parse(value);
-      final key = url.queryParameters['key'];
-      final secret = url.queryParameters['secret'];
-      if (key == null || secret == null) {
-        throw AppwriteException(
-          "Invalid OAuth2 Response. Key and Secret not available.",
-          500,
-        );
-      }
-      Cookie cookie = Cookie(key, secret);
-      cookie.domain = Uri.parse(_endPoint).host;
-      cookie.httpOnly = true;
-      cookie.path = '/';
-      List<Cookie> cookies = [cookie];
-      await init();
-      _cookieJar.saveFromResponse(Uri.parse(_endPoint), cookies);
-    });
+    );
+
+    final uri = Uri.parse(result);
+    final key = uri.queryParameters['key'] ?? uri.queryParameters['userId'];
+    final secret = uri.queryParameters['secret'];
+
+    if (key == null || secret == null) {
+      throw AppwriteException(
+        "Invalid OAuth2 Response. User ID and Key or Secret not available.",
+        500,
+      );
+    }
+
+    Cookie cookie = Cookie(key, secret);
+    cookie.domain = Uri.parse(_endPoint).host;
+    cookie.httpOnly = true;
+    cookie.path = '/';
+    List<Cookie> cookies = [cookie];
+    await init();
+    _cookieJar.saveFromResponse(Uri.parse(_endPoint), cookies);
+
+    return {'key': key, 'secret': secret};
   }
 
   @override
